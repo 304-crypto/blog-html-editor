@@ -1918,59 +1918,125 @@ ${animationCSS}
       insAt(tocHtml);
       closeModal('toc');
     }
-
-    function makeJSONLD() {
-      const type = document.getElementById('seo-type').value;
-      const doc = document.getElementById('preview-frame').contentDocument;
-
-      let schema = {
-        '@context': 'https://schema.org',
-        '@type': type
-      };
-
-      if (type === 'FAQPage') {
-        const faqs = [];
-        const elements = Array.from(doc.querySelectorAll('p, div, strong, b'));
-
-        elements.forEach((el, i) => {
-          const txt = el.innerText.trim();
-
-          if (/^Q\d+\./.test(txt)) {
-            for (let j = i + 1; j < Math.min(i + 5, elements.length); j++) {
-              const aTxt = elements[j].innerText.trim();
-
-              if (aTxt.startsWith('A.')) {
-                faqs.push({
-                  '@type': 'Question',
-                  name: txt.replace(/^Q\d+\.\s*/, '').trim(),
-                  acceptedAnswer: {
-                    '@type': 'Answer',
-                    text: aTxt.replace(/^A\.\s*/, '').trim()
-                  }
-                });
-                break;
-              }
+/* ✅ 개선된 FAQ 스키마 생성 로직 */
+function makeJSONLD() {
+  const type = document.getElementById('seo-type').value;
+  const doc = document.getElementById('preview-frame').contentDocument;
+  
+  let schema = {
+    '@context': 'https://schema.org',
+    '@type': type
+  };
+  
+  if (type === 'FAQPage') {
+    const faqs = [];
+    
+    // ✅ 방법 1: div 컨테이너 기반 Q&A 추출 (권장)
+    const containers = doc.querySelectorAll('div[style*="background-color"], div[style*="background:"]');
+    
+    containers.forEach(container => {
+      const paragraphs = container.querySelectorAll('p');
+      
+      if (paragraphs.length >= 2) {
+        const questionText = paragraphs[0].innerText.trim();
+        const answerText = paragraphs[1].innerText.trim();
+        
+        // Q 번호 및 패턴 제거
+        const cleanQuestion = questionText.replace(/^(Q|질문)\d+\.\s*/, '')
+                                         .replace(/^\[질문\]\s*/, '');
+        // A 패턴 제거
+        const cleanAnswer = answerText.replace(/^A\.\s*/, '')
+                                     .replace(/^답변:\s*/, '')
+                                     .replace(/^\[답변\]\s*/, '');
+        
+        if (cleanQuestion && cleanAnswer) {
+          faqs.push({
+            '@type': 'Question',
+            name: cleanQuestion,
+            acceptedAnswer: {
+              '@type': 'Answer',
+              text: cleanAnswer
             }
-          }
-        });
-
-        if (faqs.length > 0) schema.mainEntity = faqs;
-      } else {
-        schema.headline = doc.querySelector('h2')?.innerText || '블로그 포스팅 제목';
+          });
+        }
       }
-
-      state.jsonld =
-        `<script type="application/ld+json">` +
-        `${JSON.stringify(schema, null, 2)}<\/script>`;
-
-      document.getElementById('seo-p').innerText = state.jsonld;
-      document.getElementById('seo-ins').style.display = 'block';
+    });
+    
+    // ✅ 방법 2: 범용 패턴 인식 (컨테이너 방식으로 못 찾았을 때)
+    if (faqs.length === 0) {
+      const allTextElements = Array.from(
+        doc.querySelectorAll('p, div, h3, h4, strong, b')
+      );
+      
+      let currentQuestion = null;
+      
+      allTextElements.forEach(el => {
+        const text = el.innerText.trim();
+        
+        // Q 패턴 감지: "Q숫자.", "질문숫자.", "[질문]" 등
+        if (/^(Q|질문)\d+\./.test(text) || text.startsWith('[질문]')) {
+          currentQuestion = text.replace(/^(Q|질문)\d+\.\s*/, '')
+                               .replace(/^\[질문\]\s*/, '');
+        }
+        // A 패턴 감지: "A.", "답변:", "[답변]" 등
+        else if (currentQuestion && (/^A\./.test(text) || text.startsWith('답변:') || text.startsWith('[답변]'))) {
+          const answer = text.replace(/^A\.\s*/, '')
+                            .replace(/^답변:\s*/, '')
+                            .replace(/^\[답변\]\s*/, '');
+          
+          faqs.push({
+            '@type': 'Question',
+            name: currentQuestion,
+            acceptedAnswer: {
+              '@type': 'Answer',
+              text: answer
+            }
+          });
+          
+          currentQuestion = null;
+        }
+      });
     }
+    
+    if (faqs.length > 0) {
+      schema.mainEntity = faqs;
+toast(`✅ FAQ ${faqs.length}개 감지됨`);
+    } else {
+      const guide = `⚠️ FAQ 형식을 찾을 수 없습니다.
 
-    function insJSONLD() {
-      insAt(state.jsonld);
-      closeModal('seo');
+FAQ 형식 예시:
+
+<div style="background-color: #f8f9fa; padding: 20px;">
+  <p>Q1. 질문 내용?</p>
+  <p>A. 답변 내용</p>
+</div>
+
+또는
+
+Q1. 질문 내용?
+A. 답변 내용`;
+      
+      document.getElementById('seo-p').innerText = guide;
+      toast('⚠️ FAQ를 찾을 수 없습니다');
+      return;
     }
+  } else {
+    schema.headline = doc.querySelector('h2')?.innerText || '블로그 포스팅 제목';
+  }
+  
+  state.jsonld =
+    `<script type="application/ld+json">` +
+    `${JSON.stringify(schema, null, 2)}<\/script>`;
+  
+  document.getElementById('seo-p').innerText = state.jsonld;
+  document.getElementById('seo-ins').style.display = 'block';
+}
+
+function insJSONLD() {
+  insAt(state.jsonld);
+  closeModal('seo');
+  toast('✅ JSON-LD 삽입 완료! schema.org/validator에서 검증하세요');
+}
 
     function copyHTML() {
       navigator.clipboard
