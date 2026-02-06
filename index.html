@@ -1918,7 +1918,7 @@ ${animationCSS}
       insAt(tocHtml);
       closeModal('toc');
     }
-/* ✅ 개선된 FAQ 스키마 생성 로직 */
+/* ✅ 개선된 FAQ 스키마 생성 로직 v2 */
 function makeJSONLD() {
   const type = document.getElementById('seo-type').value;
   const doc = document.getElementById('preview-frame').contentDocument;
@@ -1931,7 +1931,7 @@ function makeJSONLD() {
   if (type === 'FAQPage') {
     const faqs = [];
     
-    // ✅ 방법 1: div 컨테이너 기반 Q&A 추출 (권장)
+    // ✅ 방법 1: div 컨테이너 기반 Q&A 추출 (권장) - 개선
     const containers = doc.querySelectorAll('div[style*="background-color"], div[style*="background:"]');
     
     containers.forEach(container => {
@@ -1941,23 +1941,29 @@ function makeJSONLD() {
         const questionText = paragraphs[0].innerText.trim();
         const answerText = paragraphs[1].innerText.trim();
         
-        // Q 번호 및 패턴 제거
-        const cleanQuestion = questionText.replace(/^(Q|질문)\d+\.\s*/, '')
-                                         .replace(/^\[질문\]\s*/, '');
-        // A 패턴 제거
-        const cleanAnswer = answerText.replace(/^A\.\s*/, '')
-                                     .replace(/^답변:\s*/, '')
-                                     .replace(/^\[답변\]\s*/, '');
+        // ✅ Q/A 패턴이 있는 것만 추출 (필터 강화)
+        const hasQPattern = /^(Q|질문)\d+\./.test(questionText) || questionText.startsWith('[질문]');
+        const hasAPattern = /^A\./.test(answerText) || answerText.startsWith('답변:') || answerText.startsWith('[답변]');
         
-        if (cleanQuestion && cleanAnswer) {
-          faqs.push({
-            '@type': 'Question',
-            name: cleanQuestion,
-            acceptedAnswer: {
-              '@type': 'Answer',
-              text: cleanAnswer
-            }
-          });
+        if (hasQPattern && hasAPattern) {
+          // Q 번호 및 패턴 제거
+          const cleanQuestion = questionText.replace(/^(Q|질문)\d+\.\s*/, '')
+                                           .replace(/^\[질문\]\s*/, '');
+          // A 패턴 제거
+          const cleanAnswer = answerText.replace(/^A\.\s*/, '')
+                                       .replace(/^답변:\s*/, '')
+                                       .replace(/^\[답변\]\s*/, '');
+          
+          if (cleanQuestion && cleanAnswer) {
+            faqs.push({
+              '@type': 'Question',
+              name: cleanQuestion,
+              acceptedAnswer: {
+                '@type': 'Answer',
+                text: cleanAnswer
+              }
+            });
+          }
         }
       }
     });
@@ -2000,7 +2006,7 @@ function makeJSONLD() {
     
     if (faqs.length > 0) {
       schema.mainEntity = faqs;
-toast(`✅ FAQ ${faqs.length}개 감지됨`);
+      toast(`✅ FAQ ${faqs.length}개 감지됨`);
     } else {
       const guide = `⚠️ FAQ 형식을 찾을 수 없습니다.
 
